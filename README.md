@@ -364,8 +364,4 @@ Ce projet a été développé dans le cadre du TP Go Final.
 - **Loris NAVARRO** - [@Loulounav78](https://github.com/Loulounav78)
 - **Gaëtan MAIRE** - [@TheD0Om](https://github.com/TheD0Om)
 
-
-
-
-
 **Made with ❤️ in attempt to get a good grade**
