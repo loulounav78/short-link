@@ -10,7 +10,7 @@ import (
 	"github.com/axellelanca/urlshortener/internal/repository"
 	"github.com/axellelanca/urlshortener/internal/services"
 	"github.com/spf13/cobra"
-	"gorm.io/driver/sqlite" // Driver SQLite pour GORM
+	"github.com/glebarez/sqlite" // Driver SQLite pour GORM
 	"gorm.io/gorm"
 )
 
@@ -43,7 +43,7 @@ Exemple:
 		cfg := cmd2.Cfg
 
 		// Initialiser la connexion à la base de données SQLite.
-		db, err := gorm.Open(sqlite.Open(cfg.Database.Name), &gorm.Config{})
+		db, err := gorm.Open(sqlite.Open("url_shortener.db"), &gorm.Config{})
 		if err != nil {
 			log.Fatalf("FATAL: Échec de la connexion à la base de données: %v", err)
 		}

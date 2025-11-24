@@ -90,18 +90,12 @@ url-shortener/
 ### Système d'Exploitation
 
 - **✅ Linux** (Testé et recommandé)
-- **⚠️ Windows** : Nécessite l'installation de [GCC](https://www.mingw-w64.org/) pour compiler le driver SQLite
-  - Installer [MinGW-w64](https://www.mingw-w64.org/downloads/)
-  - Ou utiliser [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
+- **✅ Windows** : (Testé et recommandé)
 - **✅ macOS** : Support natif
 
 ### Logiciels Requis
 
 - **Go 1.24+** - [Télécharger Go](https://go.dev/dl/)
-- **GCC/C Compiler** (pour SQLite driver)
-  - Linux: `sudo apt-get install build-essential` (Debian/Ubuntu)
-  - macOS: Installé avec Xcode Command Line Tools
-  - Windows: Voir section ci-dessus
 - **Git** - [Télécharger Git](https://git-scm.com/downloads)
 
 ### Vérification de l'Installation
@@ -134,8 +128,6 @@ go mod tidy
 ```bash
 go build -o url-shortener
 ```
-
-**Note Windows**: Si vous rencontrez l'erreur `gcc: not found`, installez MinGW-w64 et ajoutez-le à votre PATH.
 
 ## ⚙️ Configuration
 
@@ -371,43 +363,5 @@ Ce projet a été développé dans le cadre du TP Go Final.
 - **Samuel CHARTON** - [@Darukity](https://github.com/darukity)
 - **Loris NAVARRO** - [@Loulounav78](https://github.com/Loulounav78)
 - **Gaëtan MAIRE** - [@TheD0Om](https://github.com/TheD0Om)
-
-## 🐛 Dépannage
-
-### Erreur: `gcc: not found` (Windows)
-
-**Solution :**
-1. Installez [MinGW-w64](https://www.mingw-w64.org/downloads/)
-2. Ajoutez `C:\mingw64\bin` à votre PATH
-3. Redémarrez votre terminal
-4. Vérifiez: `gcc --version`
-
-### Le serveur ne démarre pas
-
-**Vérifications :**
-- Port 8080 déjà utilisé ? Changez le port dans `config.yaml`
-- Base de données migrée ? Exécutez `./url-shortener migrate`
-- Permissions fichier ? Vérifiez les droits d'écriture
-
-### Erreur de compilation SQLite
-
-**Solution Linux :**
-```bash
-sudo apt-get install build-essential
-```
-
-**Solution macOS :**
-```bash
-xcode-select --install
-```
-
-## 🔗 Liens Utiles
-
-- [Documentation Go](https://go.dev/doc/)
-- [Gin Framework](https://gin-gonic.com/docs/)
-- [GORM Guide](https://gorm.io/docs/)
-- [Cobra CLI](https://cobra.dev/)
-
----
 
 **Made with ❤️ in attempt to get a good grade**
