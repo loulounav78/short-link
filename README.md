@@ -1,219 +1,413 @@
-# TP Go Final : URL Shortener
+# URL Shortener - Service de Raccourcissement d'URLs
 
-## Objectif du Projet
-Ce TP vous met au défi de construire un service web performant de raccourcissement et de gestion d'URLs en Go. Votre application permettra de transformer une URL longue en une URL courte et unique. Chaque fois qu'une URL courte est visitée, le système redirigera instantanément l'utilisateur vers l'URL originale tout en enregistrant le clic de manière asynchrone, pour ne jamais ralentir la redirection.
+Un service web performant de raccourcissement et de gestion d'URLs construit en Go, offrant une redirection instantanée, des analytics asynchrones et un monitoring d'URL automatisé.
 
-Le service inclura également un moniteur pour vérifier périodiquement la disponibilité des URLs longues et notifier tout changement d'état. L'interaction se fera via une API RESTful et une interface en ligne de commande (CLI) complète.
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
 
-## Connaissances Mobilisées
-Ce projet est une synthèse complète et pratique de tous les concepts abordés durant ce module de Go (normalement il n'y aura pas trop de surprise) :
+## 📋 Table des Matières
 
-* Syntaxe Go de base (structs, maps, boucles, conditions, etc.)
-* Concurrence (Goroutines, Channels) pour les tâches asynchrones et non-bloquantes
-* Interfaces CLI avec [Cobra](https://cobra.dev/)
-* Gestion des erreurs
-* Manipulation de données (JSON) pour les APIs
-* APIs RESTful avec le framework web [Gin](https://gin-gonic.com/)
-* Persistance des données avec l'ORM [GORM](https://gorm.io/) et SQLite
-* Gestion de configuration avec [Viper](https://github.com/spf13/viper)
-* Design patterns courants (Repository, Service) pour une architecture propre
+- [Fonctionnalités](#-fonctionnalités)
+- [Architecture](#-architecture)
+- [Prérequis](#-prérequis)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Utilisation](#-utilisation)
+- [API Endpoints](#-api-endpoints)
+- [Technologies](#-technologies)
+- [Équipe](#-équipe)
 
+## ✨ Fonctionnalités
 
-## Fonctionnalités Attendues
-### Core Features (Obligatoires)
-1. **Raccourcissement d'URLs** :
-* Générer des codes courts uniques (6 caractères alphanumériques).
-* Gérer les collisions lors de la génération de codes via une logique de retry.
-2. **Redirection instantanée** :
-* Rediriger les utilisateurs vers l'URL originale sans latence (code HTTP 302).
-* Analytics asynchrones :
-* Enregistrer les détails de chaque clic en arrière-plan via des Goroutines et un Channel bufferisé. La redirection ne doit jamais être bloquée par l'enregistrement du clic.
-3. **Surveillance de l'état des URLs** :
-* Le service doit vérifier périodiquement (intervalle configurable via Viper) si les URLs longues sont toujours accessibles (réponse HTTP 200/3xx).
-* Si l'état d'une URL change (accessible leftrightarrow inaccessible), une fausse notification doit être générée dans les logs du serveur (ex: "[NOTIFICATION] L'URL ... est maintenant INACCESSIBLE.").
-4. **APIs REST (via Gin)** :
-* `GET /health` : Vérifie l'état de santé du service.
-* `POST /api/v1/links` : Crée une nouvelle URL courte (attend un JSON {"long_url": "..."}).
-* `GET /{shortCode}` : Gère la redirection et déclenche l'analytics asynchrone.
-* `GET /api/v1/links/{shortCode}/stats` : Récupère les statistiques d'un lien (nombre total de clics).
-5. **Interface CLI (via Cobra)** :
-* `./url-shortener run-server` : Lance le serveur API, les workers de clics et le moniteur d'URLs.
-* `./url-shortener create --url="https://..."` : Crée une URL courte depuis la ligne de commande.
-* `./url-shortener stats --code="xyz123"` : Affiche les statistiques d'un lien donné.
-* `./url-shortener migrate` : Exécute les migrations GORM pour la base de données.
-6. **Features Avancées (Bonus - si le temps le permet)**
-* URLs personnalisées : Permettre aux utilisateurs de proposer leur propre alias (ex: /mon-alias-perso).
-* Expiration des liens : Les URLs courtes peuvent avoir une durée de vie limitée.
-* Rate limiting : Protection simple par IP pour les créations de liens.
+### Fonctionnalités Principales
 
+- **🔗 Raccourcissement d'URLs**
+  - Génération de codes courts uniques (6 caractères alphanumériques)
+  - Utilisation de `crypto/rand` pour une sécurité maximale
+  - Gestion intelligente des collisions avec système de retry
 
-## Architecture du Projet
-Le projet suit une structure modulaire classique pour les applications Go, qui sépare bien les différences préoccupations du projet :
+- **⚡ Redirection Instantanée**
+  - Redirection HTTP 302 sans latence
+  - Analytics asynchrones via goroutines et channels bufferisés
+  - Aucun impact sur les performances de redirection
+
+- **📊 Suivi des Clics**
+  - Enregistrement asynchrone des clics (User-Agent, IP, timestamp)
+  - Pool de workers pour traitement parallèle
+  - Buffer de 1000 événements pour absorber les pics de trafic
+
+- **🔍 Surveillance d'URLs**
+  - Vérification périodique de la disponibilité des URLs (configurable)
+  - Notifications de changement d'état dans les logs
+  - Utilisation de requêtes HTTP HEAD pour optimiser les performances
+
+- **🖥️ Interface Dual**
+  - API RESTful complète avec Gin
+  - CLI riche avec Cobra pour l'administration
+
+## 🏗️ Architecture
+
+### Structure du Projet
+
+Le projet suit le pattern **Clean Architecture** avec séparation claire des responsabilités :
 ```
 url-shortener/
-├── cmd/
-│   ├── root.go             # Initialise la commande racine Cobra et ses sous-commandes
+├── cmd/                        # Points d'entrée de l'application
+│   ├── root.go                # Commande racine Cobra
 │   ├── server/
-│   │   └── server.go       # Logique pour la commande 'run-server' (lance le serveur Gin, les workers de clics, le moniteur)
+│   │   └── server.go          # Lance serveur, workers et monitoring
 │   └── cli/
-│       ├── create.go       # Logique pour la commande 'create' (crée un lien via CLI)
-│       ├── stats.go        # Logique pour la commande 'stats' (affiche les statistiques d'un lien via CLI)
-│       └── migrate.go      # Logique pour la commande 'migrate' (exécute les migrations GORM)
-├── internal/
+│       ├── create.go          # Création de liens via CLI
+│       ├── stats.go           # Affichage des statistiques
+│       └── migrate.go         # Migrations de base de données
+├── internal/                   # Code privé de l'application
 │   ├── api/
-│   │   └── handlers.go     # Fonctions de gestion des requêtes HTTP (handlers Gin pour les routes API)
+│   │   └── handlers.go        # Handlers HTTP (Gin)
 │   ├── models/
-│   │   ├── link.go         # Définition de la structure GORM 'Link'
-│   │   └── click.go        # Définition de la structure GORM 'Click'
+│   │   ├── link.go            # Modèle Link (GORM)
+│   │   └── click.go           # Modèle Click (GORM)
 │   ├── services/
-│   │   ├── link_service.go # Logique métier pour les liens (ex: génération de code, validation)
-│   │   └── click_service.go # Logique métier pour les clics (optionnel, peut être directement dans le worker si simple)
+│   │   ├── link_service.go    # Logique métier des liens
+│   │   └── click_service.go   # Logique métier des clics
+│   ├── repository/
+│   │   ├── link_repository.go # Accès données liens
+│   │   └── click_repository.go# Accès données clics
 │   ├── workers/
-│   │   └── click_worker.go # Goroutine et logique pour l'enregistrement asynchrone des clics
+│   │   └── click_workers.go   # Workers asynchrones
 │   ├── monitor/
-│   │   └── url_monitor.go  # Logique pour la surveillance périodique de l'état des URLs
-│   ├── config/
-│   │   └── config.go       # Chargement et structure de la configuration de l'application (Viper)
-│   └── repository/
-│       ├── link_repository.go # Interface et implémentation GORM pour les opérations CRUD sur 'Link'
-│       └── click_repository.go # Interface et implémentation GORM pour les opérations CRUD sur 'Click'
+│   │   └── url_monitor.go     # Surveillance périodique
+│   └── config/
+│       └── config.go          # Gestion configuration (Viper)
 ├── configs/
-│   └── config.yaml         # Fichier de configuration par défaut pour Viper
-├── go.mod                  # Fichier de module Go (liste des dépendances du projet)
-├── go.sum                  # Sommes de contrôle pour la sécurité des dépendances
-└── README.md               # Documentation du projet (installation, utilisation, etc.)
-
+│   └── config.yaml            # Fichier de configuration
+├── go.mod                     # Dépendances Go
+├── go.sum                     # Checksums des dépendances
+├── main.go                    # Point d'entrée principal
+└── README.md                  # Documentation
 ```
 
-## Démarrage et Utilisation du Projet
+## 💻 Prérequis
 
-Suivez ces étapes pour mettre en place le projet et tester votre application (quand elle fonctionnera, évidemment).
+### Système d'Exploitation
 
-### 1. Préparation Initiale
+- **✅ Linux** (Testé et recommandé)
+- **⚠️ Windows** : Nécessite l'installation de [GCC](https://www.mingw-w64.org/) pour compiler le driver SQLite
+  - Installer [MinGW-w64](https://www.mingw-w64.org/downloads/)
+  - Ou utiliser [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
+- **✅ macOS** : Support natif
 
-1. **Clonez le dépôt :**
+### Logiciels Requis
+
+- **Go 1.24+** - [Télécharger Go](https://go.dev/dl/)
+- **GCC/C Compiler** (pour SQLite driver)
+  - Linux: `sudo apt-get install build-essential` (Debian/Ubuntu)
+  - macOS: Installé avec Xcode Command Line Tools
+  - Windows: Voir section ci-dessus
+- **Git** - [Télécharger Git](https://git-scm.com/downloads)
+
+### Vérification de l'Installation
+
 ```bash
-git clone https://github.com/axellelanca/urlshortener.git
-cd urlshortener # Naviguez vers le dossier du projet cloné
+# Vérifier Go
+go version
+
+# Vérifier GCC (nécessaire pour SQLite)
+gcc --version
 ```
 
-2. **Téléchargez et nettoyez les dépendances :**
+## 📥 Installation
+
+### 1. Cloner le Projet
+
+```bash
+git clone https://github.com/loulounav78/short-link.git
+cd short-link
+```
+
+### 2. Installer les Dépendances
 
 ```bash
 go mod tidy
 ```
 
-## Pour tester votre projet :
+### 3. Compiler le Projet
 
-### Construisez l'exécutable :
-Ceci compile votre application et crée un fichier url-shortener à la racine du projet.
 ```bash
 go build -o url-shortener
 ```
-Désormais, toutes les commandes seront lancées avec ./url-shortener.
 
-### Initialisation de la Base de Données
+**Note Windows**: Si vous rencontrez l'erreur `gcc: not found`, installez MinGW-w64 et ajoutez-le à votre PATH.
 
-Avant de démarrer le serveur, créez le fichier de base de données SQLite et ses tables :
+## ⚙️ Configuration
 
-1.  **Exécutez les migrations :**
+Le fichier `configs/config.yaml` contient toutes les configurations :
+
+```yaml
+server:
+  port: 8080                          # Port du serveur HTTP
+  base_url: "http://localhost:8080"   # URL de base pour les liens courts
+
+database:
+  name: "url_shortener.db"            # Fichier SQLite
+
+analytics:
+  buffer_size: 1000                   # Taille du buffer du channel
+  worker_count: 5                     # Nombre de workers asynchrones
+
+monitor:
+  interval_minutes: 5                 # Intervalle de vérification des URLs
+```
+
+### Variables par Défaut
+
+Si le fichier `config.yaml` est absent, l'application utilisera les valeurs par défaut ci-dessus.
+
+## 🚀 Utilisation
+
+### 1. Initialiser la Base de Données
+
+Avant la première utilisation, créez les tables :
+
 ```bash
 ./url-shortener migrate
 ```
-Un message de succès confirmera la création des tables. Un fichier url_shortener.db sera créé à la racine du projet.
 
-### Lancer le Serveur et les Processus de Fond
+**Sortie attendue :**
+```
+2025/11/24 10:00:00 Configuration loaded: Server Port=8080, DB Name=url_shortener.db...
+Migrations de la base de données exécutées avec succès.
+```
 
-C'est l'étape qui démarre le cœur de votre application. Elle démarre le serveur web, les workers qui enregistrent les clics, et le moniteur d'URLs.
+### 2. Démarrer le Serveur
 
-Démarrez le service :
+Lancez le serveur avec tous les composants (API, workers, monitoring) :
+
 ```bash
 ./url-shortener run-server
 ```
-Laissez ce terminal ouvert et actif. Il affichera les logs du serveur HTTP, des workers de clics et du moniteur d'URLs.
 
-### 4. Interagir avec le Service (Utilise un **Nouveau Terminal**)
+**Le serveur démarre sur** `http://localhost:8080`
 
-Ouvre une **nouvelle fenêtre de terminal** pour exécuter les commandes CLI et tester les APIs pendant que le serveur est en cours d'exécution.
-
-#### 4.1. Créer une URL courte (via la CLI)
-
-Raccourcis une URL longue en utilisant la commande `create` :
-
-```bash
-./url-shortener create --url="https://www.example.com/ma-super-url-de-test-pour-le-tp-go-final"
+**Logs affichés :**
 ```
-Tu obtiendras un message similaire à :
+2025/11/24 10:00:00 Repositories initialisés.
+2025/11/24 10:00:00 Services métiers initialisés.
+2025/11/24 10:00:00 Starting 5 click worker(s)...
+2025/11/24 10:00:00 Moniteur d'URLs démarré avec un intervalle de 5m0s.
+2025/11/24 10:00:00 Serveur démarré sur :8080
+```
+
+### 3. Commandes CLI
+
+#### Créer un Lien Court
+
 ```bash
+./url-shortener create --url="https://www.example.com/very-long-url"
+```
+
+**Sortie :**
+```
 URL courte créée avec succès:
-Code: XYZ123
-URL complète: http://localhost:8080/XYZ123
+Code: mB8pRz
+URL complète: http://localhost:8080/mB8pRz
 ```
 
-Note le Code (ex: XYZ123) et l'URL complète pour les étapes suivantes.
+#### Afficher les Statistiques
 
-#### 4.2. Accéder à l'URL courte (via Navigateur)
-1. Ouvre ton navigateur web et accède à l'URL complète que tu as obtenue (par exemple, http://localhost:8080/XYZ123).
-2. Le navigateur devrait te rediriger instantanément vers l'URL longue originale. Dans le terminal où le serveur tourne (./url-shortener run-server), tu devrais voir des logs indiquant qu'un clic a été détecté et envoyé au worker asynchrone.
-
-#### 4.3. Consulter les Statistiques (via la CLI)
-Vérifie combien de fois ton URL courte a été visitée :
-
-1. Affiche les statistiques :
-```
-./url-shortener stats --code="XYZ123"
-```
-Le terminal affichera :
-```
-Statistiques pour le code court: XYZ123
-URL longue: [https://www.example.com/ma-super-url-de-test-pour-le-tp-go-final](https://www.example.com/ma-super-url-de-test-pour-le-tp-go-final)
-Total de clics: 1
-```
-(Le nombre de clics augmentera à chaque fois que tu accèderas à l'URL courte via ton navigateur).
-
-#### 4.4. Tester l'API de Santé (via curl)
-Vérifie si ton serveur est bien opérationnel :
-1. Exécute la commande curl :
-```
-curl http://localhost:8080/health
-```
-Tu devrais obtenir :
-``` 
-{"status":"ok"}
+```bash
+./url-shortener stats --code="mB8pRz"
 ```
 
-#### 4.5. Observer le Moniteur d'URLs
-Le moniteur fonctionne en arrière-plan et vérifie la disponibilité des URLs longues toutes les 5 minutes (par défaut).
-
-Observe les logs dans le terminal où run-server tourne. Si l'état d'une URL que tu as raccourcie change (par exemple, si le site devient inaccessible), tu verras un message [NOTIFICATION] similaire à :
+**Sortie :**
 ```
-[NOTIFICATION] Le lien XYZ123 ([https://url-hors-ligne.com](https://url-hors-ligne.com)) est passé de ACCESSIBLE à INACCESSIBLE !
+Statistiques pour le code court: mB8pRz
+URL longue: https://www.example.com/very-long-url
+Total de clics: 42
 ```
-(Pour tester cela, tu pourrais raccourcir une URL vers un site que tu sais hors ligne ou une adresse IP inexistante, et attendre l'intervalle de surveillance.)
 
-### 5. Arrêter le Serveur
+#### Aide des Commandes
 
-Quand tu as terminé tes tests et que tu souhaites arrêter le service :
-1. Dans le terminal où ./url-shortener run-server tourne, appuie sur :
+```bash
+./url-shortener --help
+./url-shortener create --help
+./url-shortener stats --help
 ```
-Ctrl + C
+
+## 📡 API Endpoints
+
+### Base URL
 ```
-Tu verras des logs confirmant l'arrêt propre du serveur.
+http://localhost:8080
+```
 
-## Barème de Notation (/20)
+### Endpoints Disponibles
 
-### 1. Robustesse Technique & Fonctionnelle (12 points)
-* 1 point : Le projet se lance via ./url-shortener run-server.
-* 4 points : Implémentation correcte de la redirection non-bloquante (GET /{shortCode}) avec utilisation efficace des goroutines et channels pour les analytics.
-* 2 points : Le moniteur d'URLs fonctionne correctement, vérifie les URLs périodiquement et génère des notifications logiques.
-* 3 points : Toutes les APIs REST et commandes CLI obligatoires (create, stats, migrate) sont fonctionnelles et robustes.
-* 2 points : Gestion des erreurs pertinentes.
-### 2. Qualité du Code & Documentation (2 points)
-* 2 points : Code propre, lisible, **bien commenté** et code respectant les conventions Go vu en cours, et README pertinent.
-* 2 points : Organisation des commits Git avec des messages clairs et pertinents.
-### 3. Entretien Technique (4 points)
-* 2 points : En Groupe :  Votre capacité à expliquer et à défendre votre code lors d'un entretien individuel/en groupe. Cela inclut la compréhension de l'architecture, l'explication du fonctionnement asynchrone (workers, moniteur), et votre capacité à répondre aux questions techniques sur votre code. Vous devrez être capables de naviguer dans votre projet et de justifier vos choix.
-* 2 points : Questions individuelles
-### 4. Points faciles
-* 1 point si votre code compile
-* 1 point si vous faites des erreurs personnalisées
+#### 1. Health Check
+
+```http
+GET /health
+```
+
+**Réponse :**
+```json
+{
+  "status": "ok"
+}
+```
+
+---
+
+#### 2. Créer un Lien Court
+
+```http
+POST /api/v1/links
+Content-Type: application/json
+
+{
+  "long_url": "https://www.example.com/very-long-url"
+}
+```
+
+**Réponse (201 Created) :**
+```json
+{
+  "short_code": "mB8pRz",
+  "long_url": "https://www.example.com/very-long-url",
+  "full_short_url": "http://localhost:8080/mB8pRz"
+}
+```
+
+**Exemple avec curl :**
+```bash
+curl -X POST http://localhost:8080/api/v1/links \
+  -H "Content-Type: application/json" \
+  -d '{"long_url":"https://www.example.com/test"}'
+```
+
+---
+
+#### 3. Redirection
+
+```http
+GET /{shortCode}
+```
+
+**Comportement :**
+- Redirige vers l'URL longue (HTTP 302)
+- Enregistre le clic de manière asynchrone
+- Pas de latence ajoutée
+
+**Exemple :**
+```bash
+curl -L http://localhost:8080/mB8pRz
+# Redirige automatiquement vers l'URL longue
+```
+
+---
+
+#### 4. Statistiques d'un Lien
+
+```http
+GET /api/v1/links/{shortCode}/stats
+```
+
+**Réponse (200 OK) :**
+```json
+{
+  "short_code": "mB8pRz",
+  "long_url": "https://www.example.com/very-long-url",
+  "total_clicks": 42
+}
+```
+
+**Exemple avec curl :**
+```bash
+curl http://localhost:8080/api/v1/links/mB8pRz/stats
+```
+
+---
+
+### Codes d'Erreur
+
+| Code | Description |
+|------|-------------|
+| 200 | Succès |
+| 201 | Ressource créée |
+| 302 | Redirection |
+| 400 | Requête invalide |
+| 404 | Lien non trouvé |
+| 500 | Erreur serveur |
+
+## 🛠️ Technologies
+
+### Frameworks & Bibliothèques
+
+- **[Gin](https://gin-gonic.com/)** - Framework web HTTP performant
+- **[Cobra](https://cobra.dev/)** - Création d'interfaces CLI
+- **[Viper](https://github.com/spf13/viper)** - Gestion de configuration
+- **[GORM](https://gorm.io/)** - ORM pour Go
+- **[SQLite](https://www.sqlite.org/)** - Base de données embarquée
+
+### Design Patterns
+
+- **Repository Pattern** - Abstraction de l'accès aux données
+- **Service Layer** - Logique métier centralisée
+- **Dependency Injection** - Via interfaces
+- **Worker Pool** - Traitement asynchrone avec goroutines
+
+### Concepts Go Utilisés
+
+- Goroutines & Channels
+- Interfaces
+- Error Handling
+- Struct Tags (JSON, GORM)
+- Context & Graceful Shutdown
+
+## 👥 Équipe
+
+Ce projet a été développé dans le cadre du TP Go Final.
+
+### Développeurs
+
+- **Samuel CHARTON** - [@Darukity](https://github.com/darukity)
+- **Loris NAVARRO** - [@Loulounav78](https://github.com/Loulounav78)
+- **Gaëtan MAIRE** - [@TheD0Om](https://github.com/TheD0Om)
+
+## 🐛 Dépannage
+
+### Erreur: `gcc: not found` (Windows)
+
+**Solution :**
+1. Installez [MinGW-w64](https://www.mingw-w64.org/downloads/)
+2. Ajoutez `C:\mingw64\bin` à votre PATH
+3. Redémarrez votre terminal
+4. Vérifiez: `gcc --version`
+
+### Le serveur ne démarre pas
+
+**Vérifications :**
+- Port 8080 déjà utilisé ? Changez le port dans `config.yaml`
+- Base de données migrée ? Exécutez `./url-shortener migrate`
+- Permissions fichier ? Vérifiez les droits d'écriture
+
+### Erreur de compilation SQLite
+
+**Solution Linux :**
+```bash
+sudo apt-get install build-essential
+```
+
+**Solution macOS :**
+```bash
+xcode-select --install
+```
+
+## 🔗 Liens Utiles
+
+- [Documentation Go](https://go.dev/doc/)
+- [Gin Framework](https://gin-gonic.com/docs/)
+- [GORM Guide](https://gorm.io/docs/)
+- [Cobra CLI](https://cobra.dev/)
+
+---
+
+**Made with ❤️ in attempt to get a good grade**
